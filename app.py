@@ -417,8 +417,6 @@ class PromoWatcherClient(discord.Client):
                     self.storage.mark_sent(candidate, now)
                     sent_count += 1
                     await asyncio.sleep(1.0)
-                if sent_count == 0:
-                    await channel.send(f"Проверка завершена: новых кодов нет. Время: {format_datetime(now)}")
                 logging.info("Polling cycle completed: checked=%s sent=%s", len(candidates), sent_count)
             except Exception as error:  # noqa: BLE001
                 logging.exception("Polling cycle failed: %s", error)
