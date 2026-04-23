@@ -1,7 +1,10 @@
 {
-  "poll_interval_minutes": 15,
-  "max_post_age_hours": 72,
-  "max_bad_post_age_hours": 18,
+  "poll_interval_minutes": 2,
+  "max_best_post_age_hours": 3,
+  "max_good_post_age_hours": 4,
+  "max_medium_post_age_hours": 6,
+  "max_low_post_age_hours": 12,
+  "max_bad_post_age_hours": 3,
   "bad_repeat_minutes": 30,
   "sources": [
     {
