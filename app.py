@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -22,14 +23,90 @@ from dotenv import load_dotenv
 
 UTC = timezone.utc
 MSK = timezone(timedelta(hours=3))
+
 CODE_PATTERN = re.compile(r"\b[A-Z0-9]{4,24}(?:-[A-Z0-9]{2,12}){0,3}\b")
 COMMON_UPPERCASE_WORDS = {
-    "ABOUT", "ACCESS", "ACCOUNT", "ACTIVE", "ADWEEK", "AI", "APRIL", "AUDIO", "AVAILABLE",
-    "BRANDS", "BUSINESS", "CHATGPT", "CLAUDE", "CODE", "CODES", "CREDIT", "CREDITS", "DAY",
-    "DAYS", "DEAL", "DISCOUNT", "FREE", "FROM", "GOOD", "GPT", "GUIDE", "HOURS", "MONTH",
-    "MONTHS", "NEWS", "NOW", "OFFER", "OPENAI", "PLAN", "PLUS", "POST", "PROMO", "PROMOCODE",
-    "RUNWAY", "SALE", "SAVE", "STUDENT", "SUBSCRIPTION", "THIS", "TODAY", "TRIAL",
-    "UNIVERSE", "VIDEO", "WITH", "YEAR", "YEARS",
+    "ABOUT",
+    "ACCESS",
+    "ACCOUNT",
+    "ACTIVE",
+    "ADWEEK",
+    "AI",
+    "APRIL",
+    "AUDIO",
+    "AVAILABLE",
+    "BRANDS",
+    "BUSINESS",
+    "CHATGPT",
+    "CLAUDE",
+    "CODE",
+    "CODES",
+    "CREDIT",
+    "CREDITS",
+    "DAY",
+    "DAYS",
+    "DEAL",
+    "DISCOUNT",
+    "FREE",
+    "FROM",
+    "GOOD",
+    "GPT",
+    "GUIDE",
+    "HOURS",
+    "MONTH",
+    "MONTHS",
+    "NEWS",
+    "NOW",
+    "OFFER",
+    "OPENAI",
+    "PLAN",
+    "PLUS",
+    "POST",
+    "PROMO",
+    "PROMOCODE",
+    "RUNWAY",
+    "SALE",
+    "SAVE",
+    "STUDENT",
+    "SUBSCRIPTION",
+    "THIS",
+    "TODAY",
+    "TRIAL",
+    "UNIVERSE",
+    "VIDEO",
+    "WITH",
+    "YEAR",
+    "YEARS",
+}
+OFFER_PATTERNS: list[tuple[str, str]] = [
+    ("free trial", r"\bfree\s+trial\b"),
+    ("student offer", r"\bstudent\s+offer\b"),
+    ("student discount", r"\bstudent\s+discount\b"),
+    ("credits", r"\b\d+\s*(?:credits?|tokens?)\b"),
+    ("free month", r"\b\d*\s*(?:free\s+months?|months?\s+free|free\s+month)\b"),
+    ("free days", r"\b\d+\s*(?:days?|weeks?)\s+free\b"),
+    ("discount", r"\b\d+%\s*(?:off|discount)\b"),
+    ("bonus", r"\bbonus\b"),
+    ("gift", r"\bgift\b"),
+    ("redeem", r"\bredeem\b"),
+    ("voucher", r"\bvoucher\b"),
+]
+NUMERIC_CONFIG_KEYS = (
+    "poll_interval_minutes",
+    "max_best_post_age_hours",
+    "max_good_post_age_hours",
+    "max_medium_post_age_hours",
+    "max_low_post_age_hours",
+    "max_bad_post_age_hours",
+    "bad_repeat_minutes",
+    "max_messages_per_cycle",
+)
+EMBED_COLORS = {
+    1: 0x2ECC71,
+    2: 0x3498DB,
+    3: 0xF1C40F,
+    4: 0xE67E22,
+    5: 0xE74C3C,
 }
 
 
@@ -45,6 +122,7 @@ class Candidate:
     author: str
     external_url: str
     codes: list[str]
+    offers: list[str]
     verdict: str
     verdict_rank: int
     confidence_label: str
@@ -81,12 +159,18 @@ class Storage:
         ).fetchone()
         if row is None:
             return True
+
+        previous_rank = int(row["verdict_rank"])
+        if candidate.verdict_rank < previous_rank:
+            return True
         if candidate.verdict_rank < 5:
             return False
+
         sent_at = datetime.fromisoformat(row["sent_at"])
         return now - sent_at >= timedelta(minutes=bad_repeat_minutes)
 
     def mark_sent(self, candidate: Candidate, now: datetime) -> None:
+        preview = candidate.codes or candidate.offers
         self.connection.execute(
             """
             INSERT INTO sent_candidates (identity_key, verdict_rank, sent_at, published_at, code)
@@ -102,14 +186,87 @@ class Storage:
                 candidate.verdict_rank,
                 now.isoformat(),
                 candidate.published_at.isoformat(),
-                ",".join(candidate.codes),
+                ",".join(preview),
             ),
         )
         self.connection.commit()
 
+    def close(self) -> None:
+        self.connection.close()
+
 
 def load_config(config_path: Path) -> dict[str, Any]:
-    return json.loads(config_path.read_text(encoding="utf-8"))
+    config = json.loads(config_path.read_text(encoding="utf-8-sig"))
+    config.setdefault("max_messages_per_cycle", 10)
+    validate_config(config)
+    return config
+
+
+def validate_config(config: dict[str, Any]) -> None:
+    required_root_keys = {
+        "poll_interval_minutes",
+        "max_best_post_age_hours",
+        "max_good_post_age_hours",
+        "max_medium_post_age_hours",
+        "max_low_post_age_hours",
+        "max_bad_post_age_hours",
+        "bad_repeat_minutes",
+        "sources",
+        "keyword_groups",
+        "company_aliases",
+    }
+    missing_root_keys = sorted(required_root_keys - set(config))
+    if missing_root_keys:
+        raise RuntimeError(f"Missing config keys: {', '.join(missing_root_keys)}")
+
+    for key in NUMERIC_CONFIG_KEYS:
+        value = config.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise RuntimeError(f"{key} must be a positive integer")
+
+    keyword_groups = config["keyword_groups"]
+    if not isinstance(keyword_groups, dict):
+        raise RuntimeError("keyword_groups must be an object")
+    for group_name in ("positive", "negative"):
+        group_values = keyword_groups.get(group_name)
+        if not isinstance(group_values, list) or not group_values:
+            raise RuntimeError(f"keyword_groups.{group_name} must be a non-empty list")
+        if any(not isinstance(item, str) or not item.strip() for item in group_values):
+            raise RuntimeError(f"keyword_groups.{group_name} must contain non-empty strings")
+
+    company_aliases = config["company_aliases"]
+    if not isinstance(company_aliases, dict) or not company_aliases:
+        raise RuntimeError("company_aliases must be a non-empty object")
+    for company, aliases in company_aliases.items():
+        if not isinstance(company, str) or not company.strip():
+            raise RuntimeError("company_aliases keys must be non-empty strings")
+        if not isinstance(aliases, list):
+            raise RuntimeError(f"company_aliases.{company} must be a list")
+        if any(not isinstance(alias, str) or not alias.strip() for alias in aliases):
+            raise RuntimeError(f"company_aliases.{company} must contain non-empty strings")
+
+    sources = config["sources"]
+    if not isinstance(sources, list) or not sources:
+        raise RuntimeError("sources must be a non-empty list")
+
+    required_source_keys = {"name", "kind", "company", "category", "url", "source_type"}
+    for index, source in enumerate(sources, start=1):
+        if not isinstance(source, dict):
+            raise RuntimeError(f"source #{index} must be an object")
+
+        missing_source_keys = sorted(required_source_keys - set(source))
+        if missing_source_keys:
+            raise RuntimeError(f"source #{index} is missing keys: {', '.join(missing_source_keys)}")
+
+        for key in required_source_keys:
+            value = source[key]
+            if not isinstance(value, str) or not value.strip():
+                raise RuntimeError(f"source #{index}.{key} must be a non-empty string")
+
+        if source["kind"] != "rss":
+            raise RuntimeError(f"source #{index}.kind must be 'rss'")
+        if not source["url"].startswith(("http://", "https://")):
+            raise RuntimeError(f"source #{index}.url must start with http:// or https://")
 
 
 def normalize_text(value: str) -> str:
@@ -130,11 +287,12 @@ def parse_datetime(entry: Any) -> datetime | None:
             continue
         try:
             parsed = parsedate_to_datetime(raw_value)
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=UTC)
-            return parsed.astimezone(UTC)
         except (TypeError, ValueError):
             continue
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
     return None
 
 
@@ -142,6 +300,7 @@ def extract_codes(text: str) -> list[str]:
     ignore = {"HTTP", "HTTPS", "REDDIT", "DISCORD", "OPENAI", "CHATGPT", "PROMO", "CREDITS"}
     seen: set[str] = set()
     codes: list[str] = []
+
     for match in CODE_PATTERN.findall(text.upper()):
         digit_count = sum(character.isdigit() for character in match)
         if match in ignore or match.isdigit() or match in COMMON_UPPERCASE_WORDS:
@@ -150,10 +309,30 @@ def extract_codes(text: str) -> list[str]:
             continue
         if len(match.replace("-", "")) < 6:
             continue
-        if match not in seen:
-            seen.add(match)
-            codes.append(match)
+        if match in seen:
+            continue
+        seen.add(match)
+        codes.append(match)
+
     return codes
+
+
+def extract_offer_signals(text: str) -> list[str]:
+    lowered = text.lower()
+    found: list[str] = []
+    seen: set[str] = set()
+
+    for label, pattern in OFFER_PATTERNS:
+        if re.search(pattern, lowered) and label not in seen:
+            seen.add(label)
+            found.append(label)
+
+    for keyword in ("trial", "credits", "credit", "student", "discount", "offer", "coupon"):
+        if keyword in lowered and keyword not in seen:
+            seen.add(keyword)
+            found.append(keyword)
+
+    return found
 
 
 def estimate_effect(text: str) -> str:
@@ -185,6 +364,8 @@ def assess_candidate(
     published_at: datetime,
     now: datetime,
     config: dict[str, Any],
+    has_codes: bool,
+    has_offers: bool,
 ) -> tuple[int, str, str, str, str, str]:
     lowered = text.lower()
     age_hours = max(0.0, (now - published_at).total_seconds() / 3600)
@@ -199,12 +380,12 @@ def assess_candidate(
     if any(alias in lowered for alias in aliases):
         score += 2
 
-    if extract_codes(text):
+    if has_codes:
         score += 4
+    if has_offers:
+        score += 3
 
-    if source_type == "reddit":
-        score += 1
-    elif source_type == "news":
+    if source_type in {"reddit", "news"}:
         score += 1
 
     if age_hours <= 1:
@@ -258,9 +439,14 @@ def source_age_allowed(rank: int, published_at: datetime, now: datetime, config:
     return False
 
 
-def build_identity_key(company: str, codes: list[str]) -> str:
+def build_identity_key(company: str, codes: list[str], offers: list[str], fallback_text: str) -> str:
     normalized_codes = "/".join(sorted(code.upper() for code in codes))
-    base = f"{company.lower()}|{normalized_codes}"
+    normalized_offers = "/".join(sorted(offer.lower() for offer in offers))
+    if normalized_codes or normalized_offers:
+        base = f"{company.lower()}|{normalized_codes}|{normalized_offers}"
+    else:
+        normalized_fallback = normalize_text(fallback_text).lower()[:160]
+        base = f"{company.lower()}|{normalized_fallback}"
     return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
 
@@ -270,27 +456,40 @@ async def fetch_feed(client: httpx.AsyncClient, url: str) -> Any:
     return feedparser.parse(response.text)
 
 
+def should_replace_candidate(current: Candidate | None, new: Candidate) -> bool:
+    if current is None:
+        return True
+    if new.verdict_rank < current.verdict_rank:
+        return True
+    if new.verdict_rank == current.verdict_rank and new.published_at > current.published_at:
+        return True
+    return False
+
+
 async def collect_candidates(client: httpx.AsyncClient, config: dict[str, Any]) -> list[Candidate]:
     now = datetime.now(UTC)
-    candidates: list[Candidate] = []
+    parsed_results = await asyncio.gather(
+        *(fetch_feed(client, source["url"]) for source in config["sources"]),
+        return_exceptions=True,
+    )
 
-    for source in config["sources"]:
-        try:
-            parsed = await fetch_feed(client, source["url"])
-        except Exception as error:  # noqa: BLE001
-            logging.warning("Source fetch failed for %s: %s", source["name"], error)
+    unique_candidates: dict[str, Candidate] = {}
+    for source, parsed in zip(config["sources"], parsed_results):
+        if isinstance(parsed, Exception):
+            logging.warning("Source fetch failed for %s: %s", source["name"], parsed)
             continue
 
-        for entry in parsed.entries:
+        for entry in getattr(parsed, "entries", []):
             published_at = parse_datetime(entry)
             if published_at is None:
                 continue
 
             title = normalize_text(entry.get("title", ""))
             summary = html_to_text(entry.get("summary", ""))
-            text = f"{title} {summary}"
+            text = f"{title} {summary}".strip()
             codes = extract_codes(text)
-            if not codes:
+            offers = extract_offer_signals(text)
+            if not codes and not offers:
                 continue
 
             verdict_rank, verdict, confidence, lifetime, risk, availability = assess_candidate(
@@ -300,36 +499,44 @@ async def collect_candidates(client: httpx.AsyncClient, config: dict[str, Any]) 
                 published_at=published_at,
                 now=now,
                 config=config,
+                has_codes=bool(codes),
+                has_offers=bool(offers),
             )
             if not source_age_allowed(verdict_rank, published_at, now, config):
                 continue
 
-            candidates.append(
-                Candidate(
-                    source_name=source["name"],
-                    source_type=source["source_type"],
-                    company=source["company"],
-                    category=source["category"],
-                    title=title,
-                    summary=summary,
-                    published_at=published_at,
-                    author=normalize_text(entry.get("author", "")) or "неизвестно",
-                    external_url=entry.get("link", ""),
-                    codes=codes[:3],
-                    verdict=verdict,
-                    verdict_rank=verdict_rank,
-                    confidence_label=confidence,
-                    estimated_lifetime=lifetime,
-                    activation_risk=risk,
-                    availability_type=availability,
-                    estimated_effect=estimate_effect(text),
-                    popularity_label=popularity_label(text),
-                    identity_key=build_identity_key(source["company"], codes[:3]),
-                )
+            identity_key = build_identity_key(source["company"], codes[:3], offers[:5], title or summary)
+            candidate = Candidate(
+                source_name=source["name"],
+                source_type=source["source_type"],
+                company=source["company"],
+                category=source["category"],
+                title=title,
+                summary=summary,
+                published_at=published_at,
+                author=normalize_text(entry.get("author", "")) or "неизвестно",
+                external_url=entry.get("link", ""),
+                codes=codes[:3],
+                offers=offers[:5],
+                verdict=verdict,
+                verdict_rank=verdict_rank,
+                confidence_label=confidence,
+                estimated_lifetime=lifetime,
+                activation_risk=risk,
+                availability_type=availability,
+                estimated_effect=estimate_effect(text),
+                popularity_label=popularity_label(text),
+                identity_key=identity_key,
             )
 
-    candidates.sort(key=lambda item: (item.verdict_rank, -item.published_at.timestamp()))
-    return candidates
+            current = unique_candidates.get(identity_key)
+            if should_replace_candidate(current, candidate):
+                unique_candidates[identity_key] = candidate
+
+    return sorted(
+        unique_candidates.values(),
+        key=lambda item: (item.verdict_rank, -item.published_at.timestamp()),
+    )
 
 
 def verdict_emoji(rank: int) -> str:
@@ -343,13 +550,26 @@ def format_datetime(value: datetime) -> str:
 def candidate_to_embed(candidate: Candidate) -> discord.Embed:
     embed = discord.Embed(
         title=f"{verdict_emoji(candidate.verdict_rank)} {candidate.company} | {candidate.verdict.title()}",
-        description=candidate.title[:4000] if candidate.title else "Найдено новое упоминание промокода",
-        color={1: 0x2ECC71, 2: 0x3498DB, 3: 0xF1C40F, 4: 0xE67E22, 5: 0xE74C3C}[candidate.verdict_rank],
+        description=candidate.title[:4000] if candidate.title else "Найдена новая халява",
+        color=EMBED_COLORS[candidate.verdict_rank],
     )
-    embed.add_field(name="Промокод", value="\n".join(f"`{code}`" for code in candidate.codes), inline=False)
+
+    if candidate.codes:
+        embed.add_field(
+            name="Промокод",
+            value="\n".join(f"`{code}`" for code in candidate.codes),
+            inline=False,
+        )
+    if candidate.offers:
+        embed.add_field(name="Оффер", value="\n".join(candidate.offers), inline=False)
+
     embed.add_field(name="Категория", value=candidate.category, inline=True)
     embed.add_field(name="Источник", value=f"{candidate.source_type} / {candidate.source_name}", inline=True)
-    embed.add_field(name="Где найден", value=candidate.external_url[:1024] if candidate.external_url else "ссылка не указана", inline=False)
+    embed.add_field(
+        name="Где найден",
+        value=candidate.external_url[:1024] if candidate.external_url else "ссылка не указана",
+        inline=False,
+    )
     embed.add_field(name="Дата поста", value=format_datetime(candidate.published_at), inline=True)
     embed.add_field(name="Примерное действие", value=candidate.estimated_effect, inline=True)
     embed.add_field(name="Вероятность, что рабочий", value=candidate.confidence_label, inline=True)
@@ -357,18 +577,21 @@ def candidate_to_embed(candidate: Candidate) -> discord.Embed:
     embed.add_field(name="Риск, что уже активирован", value=candidate.activation_risk, inline=True)
     embed.add_field(name="Тип доступности", value=candidate.availability_type, inline=True)
     embed.add_field(name="Популярность сигнала", value=candidate.popularity_label, inline=True)
+
     if candidate.summary:
         embed.add_field(name="Контекст", value=candidate.summary[:1024], inline=False)
+
     embed.set_footer(text=f"Автор: {candidate.author}")
     return embed
 
 
 class PromoWatcherClient(discord.Client):
-    def __init__(self, config: dict[str, Any], storage: Storage) -> None:
+    def __init__(self, config: dict[str, Any], storage: Storage, channel_id: int) -> None:
         intents = discord.Intents.none()
         super().__init__(intents=intents)
         self.config = config
         self.storage = storage
+        self.channel_id = channel_id
         self.http_client = httpx.AsyncClient(
             headers={
                 "User-Agent": "promo-watcher-bot/1.0 (+discord alert bot)",
@@ -384,18 +607,24 @@ class PromoWatcherClient(discord.Client):
     async def close(self) -> None:
         if self.poll_task:
             self.poll_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self.poll_task
         await self.http_client.aclose()
+        self.storage.close()
         await super().close()
 
     async def on_ready(self) -> None:
         logging.info("Discord bot connected as %s", self.user)
 
+    async def resolve_channel(self) -> Any:
+        channel = self.get_channel(self.channel_id)
+        if channel is not None:
+            return channel
+        return await self.fetch_channel(self.channel_id)
+
     async def poll_loop(self) -> None:
         await self.wait_until_ready()
-        channel_id = int(os.environ["DISCORD_CHANNEL_ID"])
-        channel = self.get_channel(channel_id)
-        if channel is None:
-            channel = await self.fetch_channel(channel_id)
+        channel = await self.resolve_channel()
 
         if not self.startup_message_sent:
             await channel.send(
@@ -410,17 +639,23 @@ class PromoWatcherClient(discord.Client):
             try:
                 candidates = await collect_candidates(self.http_client, self.config)
                 sent_count = 0
+                max_messages_per_cycle = self.config["max_messages_per_cycle"]
+
                 for candidate in candidates:
+                    if sent_count >= max_messages_per_cycle:
+                        logging.info("Cycle send limit reached: limit=%s", max_messages_per_cycle)
+                        break
                     if not self.storage.should_send(candidate, now, self.config["bad_repeat_minutes"]):
                         continue
+
                     await channel.send(embed=candidate_to_embed(candidate))
                     self.storage.mark_sent(candidate, now)
                     sent_count += 1
                     await asyncio.sleep(1.0)
+
                 logging.info("Polling cycle completed: checked=%s sent=%s", len(candidates), sent_count)
             except Exception as error:  # noqa: BLE001
                 logging.exception("Polling cycle failed: %s", error)
-                await channel.send(f"Ошибка цикла мониторинга: {error}")
 
             await asyncio.sleep(self.config["poll_interval_minutes"] * 60)
 
@@ -457,8 +692,16 @@ def main() -> None:
     if not token:
         raise RuntimeError("DISCORD_BOT_TOKEN is required")
 
+    channel_id_raw = os.environ.get("DISCORD_CHANNEL_ID")
+    if not channel_id_raw:
+        raise RuntimeError("DISCORD_CHANNEL_ID is required")
+    try:
+        channel_id = int(channel_id_raw)
+    except ValueError as error:
+        raise RuntimeError("DISCORD_CHANNEL_ID must be an integer") from error
+
     start_health_server()
-    client = PromoWatcherClient(config=config, storage=storage)
+    client = PromoWatcherClient(config=config, storage=storage, channel_id=channel_id)
     client.run(token, log_handler=None)
 
 
