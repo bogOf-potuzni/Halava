@@ -24,6 +24,59 @@ from dotenv import load_dotenv
 UTC = timezone.utc
 MSK = timezone(timedelta(hours=3))
 CODE_PATTERN = re.compile(r"\b[A-Z0-9]{4,20}(?:-[A-Z0-9]{2,12}){0,3}\b")
+COMMON_UPPERCASE_WORDS = {
+    "ABOUT",
+    "ACCESS",
+    "ACCOUNT",
+    "ACTIVE",
+    "ADWEEK",
+    "AI",
+    "APRIL",
+    "AUDIO",
+    "AVAILABLE",
+    "BRANDS",
+    "BUSINESS",
+    "CHATGPT",
+    "CLAUDE",
+    "CODE",
+    "CODES",
+    "CREDIT",
+    "CREDITS",
+    "DAY",
+    "DAYS",
+    "DEAL",
+    "DISCOUNT",
+    "FREE",
+    "FROM",
+    "GOOD",
+    "GPT",
+    "GUIDE",
+    "HOURS",
+    "MONTH",
+    "MONTHS",
+    "NEWS",
+    "NOW",
+    "OFFER",
+    "OPENAI",
+    "PLAN",
+    "PLUS",
+    "POST",
+    "PROMO",
+    "PROMOCODE",
+    "RUNWAY",
+    "SALE",
+    "SAVE",
+    "STUDENT",
+    "SUBSCRIPTION",
+    "THIS",
+    "TODAY",
+    "TRIAL",
+    "UNIVERSE",
+    "VIDEO",
+    "WITH",
+    "YEAR",
+    "YEARS",
+}
 
 
 @dataclass(slots=True)
@@ -146,7 +199,17 @@ def extract_codes(text: str) -> list[str]:
     for match in CODE_PATTERN.findall(text.upper()):
         if match in ignore or match.isdigit():
             continue
-        if sum(character.isdigit() for character in match) == 0 and len(match) < 6:
+        digit_count = sum(character.isdigit() for character in match)
+        has_hyphen = "-" in match
+        if match in COMMON_UPPERCASE_WORDS:
+            continue
+        if not has_hyphen and digit_count == 0:
+            continue
+        if not has_hyphen and digit_count < 2:
+            continue
+        if not has_hyphen and len(match) < 6:
+            continue
+        if has_hyphen and len(match.replace("-", "")) < 6:
             continue
         if match not in seen:
             seen.add(match)
