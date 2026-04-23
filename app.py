@@ -13,7 +13,6 @@ from html import unescape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote_plus
 
 import discord
 import feedparser
@@ -23,59 +22,14 @@ from dotenv import load_dotenv
 
 UTC = timezone.utc
 MSK = timezone(timedelta(hours=3))
-CODE_PATTERN = re.compile(r"\b[A-Z0-9]{4,20}(?:-[A-Z0-9]{2,12}){0,3}\b")
+CODE_PATTERN = re.compile(r"\b[A-Z0-9]{4,24}(?:-[A-Z0-9]{2,12}){0,3}\b")
 COMMON_UPPERCASE_WORDS = {
-    "ABOUT",
-    "ACCESS",
-    "ACCOUNT",
-    "ACTIVE",
-    "ADWEEK",
-    "AI",
-    "APRIL",
-    "AUDIO",
-    "AVAILABLE",
-    "BRANDS",
-    "BUSINESS",
-    "CHATGPT",
-    "CLAUDE",
-    "CODE",
-    "CODES",
-    "CREDIT",
-    "CREDITS",
-    "DAY",
-    "DAYS",
-    "DEAL",
-    "DISCOUNT",
-    "FREE",
-    "FROM",
-    "GOOD",
-    "GPT",
-    "GUIDE",
-    "HOURS",
-    "MONTH",
-    "MONTHS",
-    "NEWS",
-    "NOW",
-    "OFFER",
-    "OPENAI",
-    "PLAN",
-    "PLUS",
-    "POST",
-    "PROMO",
-    "PROMOCODE",
-    "RUNWAY",
-    "SALE",
-    "SAVE",
-    "STUDENT",
-    "SUBSCRIPTION",
-    "THIS",
-    "TODAY",
-    "TRIAL",
-    "UNIVERSE",
-    "VIDEO",
-    "WITH",
-    "YEAR",
-    "YEARS",
+    "ABOUT", "ACCESS", "ACCOUNT", "ACTIVE", "ADWEEK", "AI", "APRIL", "AUDIO", "AVAILABLE",
+    "BRANDS", "BUSINESS", "CHATGPT", "CLAUDE", "CODE", "CODES", "CREDIT", "CREDITS", "DAY",
+    "DAYS", "DEAL", "DISCOUNT", "FREE", "FROM", "GOOD", "GPT", "GUIDE", "HOURS", "MONTH",
+    "MONTHS", "NEWS", "NOW", "OFFER", "OPENAI", "PLAN", "PLUS", "POST", "PROMO", "PROMOCODE",
+    "RUNWAY", "SALE", "SAVE", "STUDENT", "SUBSCRIPTION", "THIS", "TODAY", "TRIAL",
+    "UNIVERSE", "VIDEO", "WITH", "YEAR", "YEARS",
 }
 
 
@@ -99,7 +53,6 @@ class Candidate:
     availability_type: str
     estimated_effect: str
     popularity_label: str
-    repeat_minutes: int | None
     identity_key: str
 
 
@@ -128,10 +81,8 @@ class Storage:
         ).fetchone()
         if row is None:
             return True
-
         if candidate.verdict_rank < 5:
             return False
-
         sent_at = datetime.fromisoformat(row["sent_at"])
         return now - sent_at >= timedelta(minutes=bad_repeat_minutes)
 
@@ -162,7 +113,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
 
 
 def normalize_text(value: str) -> str:
-    return " ".join(unescape(value).split())
+    return " ".join(unescape(value or "").split())
 
 
 def html_to_text(value: str) -> str:
@@ -187,29 +138,17 @@ def parse_datetime(entry: Any) -> datetime | None:
     return None
 
 
-def compile_query(company: str, terms: list[str]) -> str:
-    parts = [quote_plus(f'"{company}" "{term}"') for term in terms]
-    return " OR ".join(parts)
-
-
 def extract_codes(text: str) -> list[str]:
     ignore = {"HTTP", "HTTPS", "REDDIT", "DISCORD", "OPENAI", "CHATGPT", "PROMO", "CREDITS"}
     seen: set[str] = set()
     codes: list[str] = []
     for match in CODE_PATTERN.findall(text.upper()):
-        if match in ignore or match.isdigit():
-            continue
         digit_count = sum(character.isdigit() for character in match)
-        has_hyphen = "-" in match
-        if match in COMMON_UPPERCASE_WORDS:
+        if match in ignore or match.isdigit() or match in COMMON_UPPERCASE_WORDS:
             continue
-        if not has_hyphen and digit_count == 0:
+        if digit_count < 2:
             continue
-        if not has_hyphen and digit_count < 2:
-            continue
-        if not has_hyphen and len(match) < 6:
-            continue
-        if has_hyphen and len(match.replace("-", "")) < 6:
+        if len(match.replace("-", "")) < 6:
             continue
         if match not in seen:
             seen.add(match)
@@ -218,15 +157,15 @@ def extract_codes(text: str) -> list[str]:
 
 
 def estimate_effect(text: str) -> str:
-    patterns = [
-        (r"(\d+\s*(?:months?|days?|weeks?))\s+(?:free|trial|plus|pro)", None),
-        (r"(\d+\s*(?:credits?|tokens?))", None),
-        (r"(\d+%\s*(?:off|discount))", None),
-        (r"(free\s+trial)", None),
-        (r"(student\s+offer)", None),
-    ]
     lowered = text.lower()
-    for pattern, _ in patterns:
+    patterns = [
+        r"(\d+\s*(?:months?|days?|weeks?))\s+(?:free|trial|plus|pro)",
+        r"(\d+\s*(?:credits?|tokens?))",
+        r"(\d+%\s*(?:off|discount))",
+        r"(free\s+trial)",
+        r"(student\s+offer)",
+    ]
+    for pattern in patterns:
         match = re.search(pattern, lowered)
         if match:
             return match.group(1)
@@ -260,63 +199,68 @@ def assess_candidate(
     if any(alias in lowered for alias in aliases):
         score += 2
 
-    codes = extract_codes(text)
-    if codes:
+    if extract_codes(text):
         score += 4
 
     if source_type == "reddit":
         score += 1
     elif source_type == "news":
-        score += 2
+        score += 1
 
-    if age_hours <= 3:
+    if age_hours <= 1:
+        score += 5
+    elif age_hours <= 3:
         score += 4
-    elif age_hours <= 12:
-        score += 3
-    elif age_hours <= 24:
+    elif age_hours <= 6:
         score += 2
-    elif age_hours <= 72:
+    elif age_hours <= 12:
         score += 1
     else:
-        score -= 5
+        score -= 7
 
     if "official" in lowered:
         score += 3
     if "referral" in lowered:
         score -= 1
 
-    if score >= 12:
-        return 1, "лучший", "высокая", hours_to_text(12, 72), "низкий", "массовый"
-    if score >= 9:
-        return 2, "хороший", "выше средней", hours_to_text(6, 24), "средний", "ограниченный"
-    if score >= 6:
-        return 3, "средний", "средняя", hours_to_text(3, 12), "средний", "ограниченный"
-    if score >= 3:
-        return 4, "ниже среднего", "ниже средней", hours_to_text(1, 6), "высокий", "неясно"
-    return 5, "плохой", "низкая", hours_to_text(0, 3), "очень высокий", "неясно"
+    if score >= 13:
+        return 1, "лучший", "высокая", hours_to_text(1, 3), "низкий", "массовый"
+    if score >= 10:
+        return 2, "хороший", "выше средней", hours_to_text(1, 3), "средний", "ограниченный"
+    if score >= 7:
+        return 3, "средний", "средняя", hours_to_text(1, 6), "средний", "ограниченный"
+    if score >= 4:
+        return 4, "ниже среднего", "ниже средней", hours_to_text(1, 4), "высокий", "неясно"
+    return 5, "плохой", "низкая", hours_to_text(0, 2), "очень высокий", "неясно"
 
 
 def popularity_label(text: str) -> str:
     lowered = text.lower()
-    patterns = {
-        "высокая": ["viral", "trending", "many users", "hot", "popular"],
-        "средняя": ["comments", "upvotes", "likes", "shared"],
-    }
-    for label, terms in patterns.items():
-        if any(term in lowered for term in terms):
-            return label
+    if any(term in lowered for term in ("viral", "trending", "many users", "hot", "popular")):
+        return "высокая"
+    if any(term in lowered for term in ("comments", "upvotes", "likes", "shared")):
+        return "средняя"
     return "неясно"
 
 
 def source_age_allowed(rank: int, published_at: datetime, now: datetime, config: dict[str, Any]) -> bool:
     age_hours = (now - published_at).total_seconds() / 3600
+    if rank == 1:
+        return age_hours <= config["max_best_post_age_hours"]
+    if rank == 2:
+        return age_hours <= config["max_good_post_age_hours"]
+    if rank == 3:
+        return age_hours <= config["max_medium_post_age_hours"]
+    if rank == 4:
+        return age_hours <= config["max_low_post_age_hours"]
     if rank == 5:
         return age_hours <= config["max_bad_post_age_hours"]
-    return age_hours <= config["max_post_age_hours"]
+    return False
 
 
-def build_identity_key(company: str, codes: list[str], title: str, published_at: datetime) -> str:
-    base = f"{company}|{'/'.join(codes)}|{title.lower()}|{published_at.isoformat()}"
+def build_identity_key(company: str, codes: list[str]) -> str:
+    normalized_codes = "/".join(sorted(code.upper() for code in codes))
+    base = f"{company.lower()}|{normalized_codes}"
     return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
 
@@ -345,6 +289,10 @@ async def collect_candidates(client: httpx.AsyncClient, config: dict[str, Any]) 
             title = normalize_text(entry.get("title", ""))
             summary = html_to_text(entry.get("summary", ""))
             text = f"{title} {summary}"
+            codes = extract_codes(text)
+            if not codes:
+                continue
+
             verdict_rank, verdict, confidence, lifetime, risk, availability = assess_candidate(
                 text=text,
                 source_type=source["source_type"],
@@ -356,46 +304,36 @@ async def collect_candidates(client: httpx.AsyncClient, config: dict[str, Any]) 
             if not source_age_allowed(verdict_rank, published_at, now, config):
                 continue
 
-            codes = extract_codes(text)
-            if not codes:
-                continue
-
-            candidate = Candidate(
-                source_name=source["name"],
-                source_type=source["source_type"],
-                company=source["company"],
-                category=source["category"],
-                title=title,
-                summary=summary,
-                published_at=published_at,
-                author=normalize_text(entry.get("author", "")) or "неизвестно",
-                external_url=entry.get("link", ""),
-                codes=codes[:3],
-                verdict=verdict,
-                verdict_rank=verdict_rank,
-                confidence_label=confidence,
-                estimated_lifetime=lifetime,
-                activation_risk=risk,
-                availability_type=availability,
-                estimated_effect=estimate_effect(text),
-                popularity_label=popularity_label(text),
-                repeat_minutes=config["bad_repeat_minutes"] if verdict_rank == 5 else None,
-                identity_key=build_identity_key(source["company"], codes[:3], title, published_at),
+            candidates.append(
+                Candidate(
+                    source_name=source["name"],
+                    source_type=source["source_type"],
+                    company=source["company"],
+                    category=source["category"],
+                    title=title,
+                    summary=summary,
+                    published_at=published_at,
+                    author=normalize_text(entry.get("author", "")) or "неизвестно",
+                    external_url=entry.get("link", ""),
+                    codes=codes[:3],
+                    verdict=verdict,
+                    verdict_rank=verdict_rank,
+                    confidence_label=confidence,
+                    estimated_lifetime=lifetime,
+                    activation_risk=risk,
+                    availability_type=availability,
+                    estimated_effect=estimate_effect(text),
+                    popularity_label=popularity_label(text),
+                    identity_key=build_identity_key(source["company"], codes[:3]),
+                )
             )
-            candidates.append(candidate)
 
-    candidates.sort(key=lambda item: (item.verdict_rank, item.published_at), reverse=False)
+    candidates.sort(key=lambda item: (item.verdict_rank, -item.published_at.timestamp()))
     return candidates
 
 
 def verdict_emoji(rank: int) -> str:
-    return {
-        1: "🟢",
-        2: "🔵",
-        3: "🟡",
-        4: "🟠",
-        5: "🔴",
-    }[rank]
+    return {1: "🟢", 2: "🔵", 3: "🟡", 4: "🟠", 5: "🔴"}[rank]
 
 
 def format_datetime(value: datetime) -> str:
@@ -406,17 +344,12 @@ def candidate_to_embed(candidate: Candidate) -> discord.Embed:
     embed = discord.Embed(
         title=f"{verdict_emoji(candidate.verdict_rank)} {candidate.company} | {candidate.verdict.title()}",
         description=candidate.title[:4000] if candidate.title else "Найдено новое упоминание промокода",
-        color={
-            1: 0x2ECC71,
-            2: 0x3498DB,
-            3: 0xF1C40F,
-            4: 0xE67E22,
-            5: 0xE74C3C,
-        }[candidate.verdict_rank],
+        color={1: 0x2ECC71, 2: 0x3498DB, 3: 0xF1C40F, 4: 0xE67E22, 5: 0xE74C3C}[candidate.verdict_rank],
     )
     embed.add_field(name="Промокод", value="\n".join(f"`{code}`" for code in candidate.codes), inline=False)
     embed.add_field(name="Категория", value=candidate.category, inline=True)
     embed.add_field(name="Источник", value=f"{candidate.source_type} / {candidate.source_name}", inline=True)
+    embed.add_field(name="Где найден", value=candidate.external_url[:1024] if candidate.external_url else "ссылка не указана", inline=False)
     embed.add_field(name="Дата поста", value=format_datetime(candidate.published_at), inline=True)
     embed.add_field(name="Примерное действие", value=candidate.estimated_effect, inline=True)
     embed.add_field(name="Вероятность, что рабочий", value=candidate.confidence_label, inline=True)
@@ -467,13 +400,15 @@ class PromoWatcherClient(discord.Client):
             now = datetime.now(UTC)
             try:
                 candidates = await collect_candidates(self.http_client, self.config)
+                sent_count = 0
                 for candidate in candidates:
                     if not self.storage.should_send(candidate, now, self.config["bad_repeat_minutes"]):
                         continue
                     await channel.send(embed=candidate_to_embed(candidate))
                     self.storage.mark_sent(candidate, now)
+                    sent_count += 1
                     await asyncio.sleep(1.0)
-                logging.info("Polling cycle completed: %s candidates checked", len(candidates))
+                logging.info("Polling cycle completed: checked=%s sent=%s", len(candidates), sent_count)
             except Exception as error:  # noqa: BLE001
                 logging.exception("Polling cycle failed: %s", error)
 
@@ -502,10 +437,7 @@ def start_health_server() -> None:
 
 def main() -> None:
     load_dotenv()
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
     config_path = Path(os.environ.get("APP_CONFIG_PATH", "config.json"))
     config = load_config(config_path)
