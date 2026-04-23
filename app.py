@@ -5,10 +5,12 @@ import logging
 import os
 import re
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote_plus
@@ -415,6 +417,26 @@ class PromoWatcherClient(discord.Client):
             await asyncio.sleep(self.config["poll_interval_minutes"] * 60)
 
 
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802
+        body = b"ok"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
+        return
+
+
+def start_health_server() -> None:
+    port = int(os.environ.get("PORT", "10000"))
+    server = ThreadingHTTPServer(("0.0.0.0", port), HealthHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    logging.info("Health server listening on port %s", port)
+
+
 def main() -> None:
     load_dotenv()
     logging.basicConfig(
@@ -430,6 +452,7 @@ def main() -> None:
     if not token:
         raise RuntimeError("DISCORD_BOT_TOKEN is required")
 
+    start_health_server()
     client = PromoWatcherClient(config=config, storage=storage)
     client.run(token, log_handler=None)
 
