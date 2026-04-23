@@ -1,0 +1,155 @@
+{
+  "poll_interval_minutes": 15,
+  "max_post_age_hours": 72,
+  "max_bad_post_age_hours": 18,
+  "bad_repeat_minutes": 30,
+  "sources": [
+    {
+      "name": "reddit-openai",
+      "kind": "rss",
+      "company": "OpenAI",
+      "category": "AI Chat / Research",
+      "url": "https://www.reddit.com/r/OpenAI/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "reddit-chatgpt",
+      "kind": "rss",
+      "company": "ChatGPT",
+      "category": "AI Chat / Research",
+      "url": "https://www.reddit.com/r/ChatGPT/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "reddit-runwayml",
+      "kind": "rss",
+      "company": "Runway",
+      "category": "AI Video",
+      "url": "https://www.reddit.com/r/runwayml/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "reddit-generativeAI",
+      "kind": "rss",
+      "company": "General AI",
+      "category": "Mixed",
+      "url": "https://www.reddit.com/r/GenerativeAI/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "reddit-midjourney",
+      "kind": "rss",
+      "company": "Midjourney",
+      "category": "AI Image",
+      "url": "https://www.reddit.com/r/midjourney/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "reddit-stablediffusion",
+      "kind": "rss",
+      "company": "Stable Diffusion",
+      "category": "AI Image",
+      "url": "https://www.reddit.com/r/StableDiffusion/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "reddit-meshy",
+      "kind": "rss",
+      "company": "Meshy",
+      "category": "AI 3D Models",
+      "url": "https://www.reddit.com/search.rss?q=Meshy%20promo%20OR%20Meshy%20code%20OR%20Meshy%20credits&sort=new",
+      "source_type": "reddit"
+    },
+    {
+      "name": "reddit-tripo",
+      "kind": "rss",
+      "company": "Tripo",
+      "category": "AI 3D Models",
+      "url": "https://www.reddit.com/search.rss?q=Tripo%20promo%20OR%20Tripo%20code%20OR%20Tripo%20credits&sort=new",
+      "source_type": "reddit"
+    },
+    {
+      "name": "google-openai",
+      "kind": "rss",
+      "company": "OpenAI",
+      "category": "AI Chat / Research",
+      "url": "https://news.google.com/rss/search?q=OpenAI%20promo%20code%20OR%20ChatGPT%20promo%20code%20OR%20OpenAI%20credits&hl=en-US&gl=US&ceid=US:en",
+      "source_type": "news"
+    },
+    {
+      "name": "google-runway",
+      "kind": "rss",
+      "company": "Runway",
+      "category": "AI Video",
+      "url": "https://news.google.com/rss/search?q=Runway%20promo%20code%20OR%20Runway%20credits%20OR%20Runway%20discount&hl=en-US&gl=US&ceid=US:en",
+      "source_type": "news"
+    },
+    {
+      "name": "google-leonardo",
+      "kind": "rss",
+      "company": "Leonardo AI",
+      "category": "AI Image",
+      "url": "https://news.google.com/rss/search?q=Leonardo%20AI%20promo%20code%20OR%20Leonardo%20credits%20OR%20Leonardo%20discount&hl=en-US&gl=US&ceid=US:en",
+      "source_type": "news"
+    },
+    {
+      "name": "google-meshy",
+      "kind": "rss",
+      "company": "Meshy",
+      "category": "AI 3D Models",
+      "url": "https://news.google.com/rss/search?q=Meshy%20promo%20code%20OR%20Meshy%20credits%20OR%20Meshy%20discount&hl=en-US&gl=US&ceid=US:en",
+      "source_type": "news"
+    }
+  ],
+  "keyword_groups": {
+    "positive": [
+      "promo code",
+      "promocode",
+      "coupon",
+      "discount",
+      "trial",
+      "free trial",
+      "credits",
+      "credit",
+      "redeem",
+      "voucher",
+      "student",
+      "education",
+      "deal",
+      "offer",
+      "free month",
+      "free months",
+      "gift",
+      "referral"
+    ],
+    "negative": [
+      "expired",
+      "doesn't work",
+      "not working",
+      "dead code",
+      "scam",
+      "fake",
+      "patch",
+      "bypass",
+      "cracked",
+      "leak"
+    ]
+  },
+  "company_aliases": {
+    "OpenAI": ["openai", "chatgpt", "gpt"],
+    "ChatGPT": ["chatgpt", "gpt"],
+    "Runway": ["runway", "runwayml"],
+    "Leonardo AI": ["leonardo", "leonardo ai"],
+    "Meshy": ["meshy"],
+    "Tripo": ["tripo", "tripo ai"],
+    "Midjourney": ["midjourney"],
+    "Stable Diffusion": ["stable diffusion", "sdxl"],
+    "General AI": ["ai", "video", "image", "3d", "credits"]
+  },
+  "skip_patterns": [
+    "2 years ago",
+    "1 year ago",
+    "2023",
+    "2024"
+  ]
+}
