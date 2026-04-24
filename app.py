@@ -124,6 +124,26 @@ class Candidate:
     identity_key: str
 
 
+@dataclass(slots=True)
+class SourceStats:
+    name: str
+    total_entries: int = 0
+    rejected_no_signal: int = 0
+    rejected_too_old: int = 0
+    accepted: int = 0
+
+
+@dataclass(slots=True)
+class CycleStats:
+    scanned_sources: int
+    source_stats: list[SourceStats]
+    total_entries: int
+    accepted_candidates: int
+    rejected_no_signal: int
+    rejected_too_old: int
+    category_counts: dict[int, int]
+
+
 class Storage:
     def __init__(self, db_path: Path) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -142,7 +162,13 @@ class Storage:
         )
         self.connection.commit()
 
-    def should_send(self, candidate: Candidate, now: datetime, bad_repeat_minutes: int) -> bool:
+    def should_send(
+        self,
+        candidate: Candidate,
+        now: datetime,
+        medium_repeat_minutes: int,
+        low_repeat_minutes: int,
+    ) -> bool:
         row = self.connection.execute(
             "SELECT verdict_rank, sent_at FROM sent_candidates WHERE identity_key = ?",
             (candidate.identity_key,),
@@ -153,11 +179,12 @@ class Storage:
         previous_rank = int(row["verdict_rank"])
         if candidate.verdict_rank < previous_rank:
             return True
-        if candidate.verdict_rank < 5:
+        if candidate.verdict_rank in {1, 2}:
             return False
 
         sent_at = datetime.fromisoformat(row["sent_at"])
-        return now - sent_at >= timedelta(minutes=bad_repeat_minutes)
+        repeat_minutes = medium_repeat_minutes if candidate.verdict_rank == 3 else low_repeat_minutes
+        return now - sent_at >= timedelta(minutes=repeat_minutes)
 
     def mark_sent(self, candidate: Candidate, now: datetime) -> None:
         preview = ",".join(candidate.codes or candidate.signals or [candidate.title[:64]])
@@ -199,7 +226,8 @@ def validate_config(config: dict[str, Any]) -> None:
         "max_medium_post_age_hours",
         "max_low_post_age_hours",
         "max_bad_post_age_hours",
-        "bad_repeat_minutes",
+        "medium_repeat_minutes",
+        "low_repeat_minutes",
         "max_messages_per_cycle",
         "sources",
         "keyword_groups",
@@ -402,7 +430,7 @@ def should_replace_candidate(current: Candidate | None, new: Candidate) -> bool:
     return new.verdict_rank == current.verdict_rank and new.published_at > current.published_at
 
 
-async def collect_candidates(client: httpx.AsyncClient, config: dict[str, Any]) -> list[Candidate]:
+async def collect_candidates(client: httpx.AsyncClient, config: dict[str, Any]) -> tuple[list[Candidate], CycleStats]:
     now = datetime.now(UTC)
     results = await asyncio.gather(
         *(fetch_feed(client, source["url"]) for source in config["sources"]),
@@ -410,16 +438,27 @@ async def collect_candidates(client: httpx.AsyncClient, config: dict[str, Any]) 
     )
 
     unique_candidates: dict[str, Candidate] = {}
+    source_stats_list: list[SourceStats] = []
+    total_entries = 0
+    total_rejected_no_signal = 0
+    total_rejected_too_old = 0
+    category_counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+
     for source, parsed in zip(config["sources"], results):
         if isinstance(parsed, Exception):
             logging.warning("Source fetch failed for %s: %s", source["name"], parsed)
             continue
 
         entries = getattr(parsed, "entries", [])
-        logging.info("Source %s returned %s entries", source["name"], len(entries))
+        source_stats = SourceStats(name=source["name"], total_entries=len(entries))
+        source_stats_list.append(source_stats)
+        total_entries += len(entries)
+        logging.info("Scanning source %s: entries=%s", source["name"], len(entries))
         for entry in entries:
             published_at = parse_datetime(entry)
             if published_at is None:
+                source_stats.rejected_no_signal += 1
+                total_rejected_no_signal += 1
                 continue
 
             title = normalize_text(entry.get("title", ""))
@@ -429,6 +468,8 @@ async def collect_candidates(client: httpx.AsyncClient, config: dict[str, Any]) 
             codes = extract_codes(text)
             signals = extract_signals(text, aliases)
             if not codes and len(signals) < 2:
+                source_stats.rejected_no_signal += 1
+                total_rejected_no_signal += 1
                 continue
 
             verdict_rank, verdict, confidence, lifetime, risk, availability = classify_candidate(
@@ -442,6 +483,8 @@ async def collect_candidates(client: httpx.AsyncClient, config: dict[str, Any]) 
                 source_type=source["source_type"],
             )
             if not source_age_allowed(verdict_rank, published_at, now, config):
+                source_stats.rejected_too_old += 1
+                total_rejected_too_old += 1
                 continue
 
             candidate = Candidate(
@@ -470,8 +513,29 @@ async def collect_candidates(client: httpx.AsyncClient, config: dict[str, Any]) 
             current = unique_candidates.get(candidate.identity_key)
             if should_replace_candidate(current, candidate):
                 unique_candidates[candidate.identity_key] = candidate
+            source_stats.accepted += 1
+            category_counts[verdict_rank] += 1
 
-    return sorted(unique_candidates.values(), key=lambda item: (item.verdict_rank, -item.published_at.timestamp()))
+        logging.info(
+            "Source %s summary: entries=%s accepted=%s rejected_no_signal=%s rejected_too_old=%s",
+            source_stats.name,
+            source_stats.total_entries,
+            source_stats.accepted,
+            source_stats.rejected_no_signal,
+            source_stats.rejected_too_old,
+        )
+
+    candidates = sorted(unique_candidates.values(), key=lambda item: (item.verdict_rank, -item.published_at.timestamp()))
+    stats = CycleStats(
+        scanned_sources=len(source_stats_list),
+        source_stats=source_stats_list,
+        total_entries=total_entries,
+        accepted_candidates=len(candidates),
+        rejected_no_signal=total_rejected_no_signal,
+        rejected_too_old=total_rejected_too_old,
+        category_counts=category_counts,
+    )
+    return candidates, stats
 
 
 def verdict_emoji(rank: int) -> str:
@@ -522,6 +586,12 @@ class PromoWatcherClient(discord.Client):
         )
         self.poll_task: asyncio.Task[None] | None = None
         self.startup_message_sent = False
+        self.hourly_started_at = datetime.now(UTC)
+        self.hourly_entries = 0
+        self.hourly_candidates = 0
+        self.hourly_sent = 0
+        self.hourly_rejected_no_signal = 0
+        self.hourly_rejected_too_old = 0
 
     async def setup_hook(self) -> None:
         self.poll_task = asyncio.create_task(self.poll_loop())
@@ -546,28 +616,67 @@ class PromoWatcherClient(discord.Client):
         channel = await self.resolve_channel()
 
         if not self.startup_message_sent:
-            await channel.send(
-                "Бот запущен и мониторинг активен.\n"
-                f"Проверка источников: каждые {self.config['poll_interval_minutes']} мин.\n"
-                f"Повтор плохих кодов: каждые {self.config['bad_repeat_minutes']} мин."
-            )
+            await channel.send("Бот запущен")
             self.startup_message_sent = True
 
         while not self.is_closed():
             now = datetime.now(UTC)
             try:
-                candidates = await collect_candidates(self.http_client, self.config)
+                logging.info(
+                    "Starting scan: sources=%s interval=%s min",
+                    len(self.config["sources"]),
+                    self.config["poll_interval_minutes"],
+                )
+                candidates, cycle_stats = await collect_candidates(self.http_client, self.config)
                 sent_count = 0
                 for candidate in candidates:
                     if sent_count >= self.config["max_messages_per_cycle"]:
                         break
-                    if not self.storage.should_send(candidate, now, self.config["bad_repeat_minutes"]):
+                    if not self.storage.should_send(
+                        candidate,
+                        now,
+                        self.config["medium_repeat_minutes"],
+                        self.config["low_repeat_minutes"],
+                    ):
                         continue
                     await channel.send(embed=candidate_to_embed(candidate))
                     self.storage.mark_sent(candidate, now)
                     sent_count += 1
                     await asyncio.sleep(1.0)
-                logging.info("Polling cycle completed: checked=%s sent=%s", len(candidates), sent_count)
+                self.hourly_entries += cycle_stats.total_entries
+                self.hourly_candidates += cycle_stats.accepted_candidates
+                self.hourly_sent += sent_count
+                self.hourly_rejected_no_signal += cycle_stats.rejected_no_signal
+                self.hourly_rejected_too_old += cycle_stats.rejected_too_old
+                logging.info(
+                    "Polling cycle completed: sources=%s entries=%s checked=%s rejected_no_signal=%s rejected_too_old=%s sent=%s categories=1:%s 2:%s 3:%s 4:%s 5:%s",
+                    cycle_stats.scanned_sources,
+                    cycle_stats.total_entries,
+                    cycle_stats.accepted_candidates,
+                    cycle_stats.rejected_no_signal,
+                    cycle_stats.rejected_too_old,
+                    sent_count,
+                    cycle_stats.category_counts[1],
+                    cycle_stats.category_counts[2],
+                    cycle_stats.category_counts[3],
+                    cycle_stats.category_counts[4],
+                    cycle_stats.category_counts[5],
+                )
+                if now - self.hourly_started_at >= timedelta(hours=1):
+                    await channel.send(
+                        "Часовой отчет\n"
+                        f"Просканировано записей: {self.hourly_entries}\n"
+                        f"Прошло фильтр: {self.hourly_candidates}\n"
+                        f"Отправлено: {self.hourly_sent}\n"
+                        f"Отклонено без сигналов: {self.hourly_rejected_no_signal}\n"
+                        f"Отклонено как старое: {self.hourly_rejected_too_old}"
+                    )
+                    self.hourly_started_at = now
+                    self.hourly_entries = 0
+                    self.hourly_candidates = 0
+                    self.hourly_sent = 0
+                    self.hourly_rejected_no_signal = 0
+                    self.hourly_rejected_too_old = 0
             except Exception as error:  # noqa: BLE001
                 logging.exception("Polling cycle failed: %s", error)
 
