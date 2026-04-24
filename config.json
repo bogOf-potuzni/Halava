@@ -1,11 +1,12 @@
 {
-  "poll_interval_minutes": 2,
+  "poll_interval_minutes": 1,
   "max_best_post_age_hours": 3,
   "max_good_post_age_hours": 5,
   "max_medium_post_age_hours": 8,
   "max_low_post_age_hours": 12,
   "max_bad_post_age_hours": 3,
-  "bad_repeat_minutes": 30,
+  "medium_repeat_minutes": 10,
+  "low_repeat_minutes": 30,
   "max_messages_per_cycle": 10,
   "sources": [
     {
@@ -14,7 +15,8 @@
       "company": "OpenAI",
       "category": "AI Chat / Research",
       "url": "https://www.reddit.com/search.rss?q=(OpenAI%20OR%20ChatGPT)%20(free%20OR%20coupon%20OR%20cupon%20OR%20code%20OR%20promo%20OR%20credits%20OR%20trial%20OR%20gift%20OR%20redeem)&sort=new",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 2
     },
     {
       "name": "reddit-runway-search",
@@ -22,7 +24,8 @@
       "company": "Runway",
       "category": "AI Video",
       "url": "https://www.reddit.com/search.rss?q=(Runway%20OR%20RunwayML)%20(free%20OR%20coupon%20OR%20code%20OR%20promo%20OR%20credits%20OR%20trial%20OR%20gift%20OR%20redeem)&sort=new",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 2
     },
     {
       "name": "reddit-leonardo-search",
@@ -30,7 +33,8 @@
       "company": "Leonardo AI",
       "category": "AI Image",
       "url": "https://www.reddit.com/search.rss?q=(%22Leonardo%20AI%22%20OR%20Leonardo)%20(free%20OR%20coupon%20OR%20code%20OR%20promo%20OR%20credits%20OR%20trial%20OR%20gift%20OR%20redeem)&sort=new",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 2
     },
     {
       "name": "reddit-meshy-search",
@@ -38,7 +42,8 @@
       "company": "Meshy",
       "category": "AI 3D Models",
       "url": "https://www.reddit.com/search.rss?q=Meshy%20(free%20OR%20coupon%20OR%20code%20OR%20promo%20OR%20credits%20OR%20trial%20OR%20gift%20OR%20redeem)&sort=new",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 2
     },
     {
       "name": "reddit-tripo-search",
@@ -46,7 +51,44 @@
       "company": "Tripo",
       "category": "AI 3D Models",
       "url": "https://www.reddit.com/search.rss?q=(Tripo%20OR%20%22Tripo%20AI%22)%20(free%20OR%20coupon%20OR%20code%20OR%20promo%20OR%20credits%20OR%20trial%20OR%20gift%20OR%20redeem)&sort=new",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 2
+    },
+    {
+      "name": "promocodes-openai-search",
+      "kind": "rss",
+      "company": "OpenAI",
+      "category": "AI Chat / Research",
+      "url": "https://www.reddit.com/search.rss?q=subreddit%3APromoCodes%20(OpenAI%20OR%20ChatGPT)%20(code%20OR%20coupon%20OR%20promo%20OR%20gift)&sort=new",
+      "source_type": "reddit",
+      "source_bonus": 4
+    },
+    {
+      "name": "freebies-openai-search",
+      "kind": "rss",
+      "company": "OpenAI",
+      "category": "AI Chat / Research",
+      "url": "https://www.reddit.com/search.rss?q=subreddit%3Afreebies%20(OpenAI%20OR%20ChatGPT)%20(free%20OR%20trial%20OR%20gift%20OR%20credits)&sort=new",
+      "source_type": "reddit",
+      "source_bonus": 4
+    },
+    {
+      "name": "beermoney-openai-search",
+      "kind": "rss",
+      "company": "OpenAI",
+      "category": "AI Chat / Research",
+      "url": "https://www.reddit.com/search.rss?q=subreddit%3Abeermoney%20(OpenAI%20OR%20ChatGPT)%20(code%20OR%20coupon%20OR%20credits%20OR%20trial)&sort=new",
+      "source_type": "reddit",
+      "source_bonus": 4
+    },
+    {
+      "name": "promocodes-ai-tools-search",
+      "kind": "rss",
+      "company": "General AI",
+      "category": "Mixed",
+      "url": "https://www.reddit.com/search.rss?q=subreddit%3APromoCodes%20(%22AI%22%20OR%20%22ChatGPT%22%20OR%20%22Runway%22%20OR%20%22Leonardo%22%20OR%20%22Meshy%22)%20(code%20OR%20coupon%20OR%20promo%20OR%20gift)&sort=new",
+      "source_type": "reddit",
+      "source_bonus": 4
     },
     {
       "name": "sub-openai",
@@ -54,7 +96,8 @@
       "company": "OpenAI",
       "category": "AI Chat / Research",
       "url": "https://www.reddit.com/r/OpenAI/new/.rss",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 1
     },
     {
       "name": "sub-chatgpt",
@@ -62,7 +105,8 @@
       "company": "OpenAI",
       "category": "AI Chat / Research",
       "url": "https://www.reddit.com/r/ChatGPT/new/.rss",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 1
     },
     {
       "name": "sub-runwayml",
@@ -70,7 +114,8 @@
       "company": "Runway",
       "category": "AI Video",
       "url": "https://www.reddit.com/r/runwayml/new/.rss",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 1
     },
     {
       "name": "sub-stablediffusion",
@@ -78,7 +123,8 @@
       "company": "Leonardo AI",
       "category": "AI Image",
       "url": "https://www.reddit.com/r/StableDiffusion/new/.rss",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 1
     },
     {
       "name": "sub-generativeai",
@@ -86,7 +132,8 @@
       "company": "General AI",
       "category": "Mixed",
       "url": "https://www.reddit.com/r/GenerativeAI/new/.rss",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 0
     },
     {
       "name": "sub-aiart",
@@ -94,7 +141,8 @@
       "company": "General AI",
       "category": "AI Image",
       "url": "https://www.reddit.com/r/aiArt/new/.rss",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 0
     },
     {
       "name": "sub-promocodes",
@@ -102,7 +150,8 @@
       "company": "General AI",
       "category": "Mixed",
       "url": "https://www.reddit.com/r/PromoCodes/new/.rss",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 3
     },
     {
       "name": "sub-freebies",
@@ -110,7 +159,8 @@
       "company": "General AI",
       "category": "Mixed",
       "url": "https://www.reddit.com/r/freebies/new/.rss",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 3
     },
     {
       "name": "sub-beermoney",
@@ -118,7 +168,35 @@
       "company": "General AI",
       "category": "Mixed",
       "url": "https://www.reddit.com/r/beermoney/new/.rss",
-      "source_type": "reddit"
+      "source_type": "reddit",
+      "source_bonus": 3
+    },
+    {
+      "name": "google-openai-search",
+      "kind": "rss",
+      "company": "OpenAI",
+      "category": "AI Chat / Research",
+      "url": "https://news.google.com/rss/search?q=(OpenAI%20OR%20ChatGPT)%20(code%20OR%20coupon%20OR%20promo%20OR%20credits%20OR%20trial)&hl=en-US&gl=US&ceid=US:en",
+      "source_type": "news",
+      "source_bonus": -1
+    },
+    {
+      "name": "google-runway-search",
+      "kind": "rss",
+      "company": "Runway",
+      "category": "AI Video",
+      "url": "https://news.google.com/rss/search?q=(Runway%20OR%20RunwayML)%20(code%20OR%20coupon%20OR%20promo%20OR%20credits%20OR%20trial)&hl=en-US&gl=US&ceid=US:en",
+      "source_type": "news",
+      "source_bonus": -1
+    },
+    {
+      "name": "google-leonardo-search",
+      "kind": "rss",
+      "company": "Leonardo AI",
+      "category": "AI Image",
+      "url": "https://news.google.com/rss/search?q=(%22Leonardo%20AI%22%20OR%20Leonardo)%20(code%20OR%20coupon%20OR%20promo%20OR%20credits%20OR%20trial)&hl=en-US&gl=US&ceid=US:en",
+      "source_type": "news",
+      "source_bonus": -1
     }
   ],
   "keyword_groups": {
