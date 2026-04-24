@@ -347,6 +347,7 @@ def classify_candidate(
     codes: list[str],
     signals: list[str],
     source_type: str,
+    source_bonus: int,
 ) -> tuple[int, str, str, str, str, str]:
     lowered = text.lower()
     age_hours = max(0.0, (now - published_at).total_seconds() / 3600)
@@ -378,6 +379,10 @@ def classify_candidate(
 
     if source_type == "reddit":
         score += 1
+    elif source_type == "news":
+        score -= 1
+
+    score += source_bonus
 
     if age_hours <= 1:
         score += 5
@@ -481,6 +486,7 @@ async def collect_candidates(client: httpx.AsyncClient, config: dict[str, Any]) 
                 codes=codes,
                 signals=signals,
                 source_type=source["source_type"],
+                source_bonus=int(source.get("source_bonus", 0)),
             )
             if not source_age_allowed(verdict_rank, published_at, now, config):
                 source_stats.rejected_too_old += 1
