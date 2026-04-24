@@ -1,59 +1,123 @@
 {
   "poll_interval_minutes": 2,
   "max_best_post_age_hours": 3,
-  "max_good_post_age_hours": 4,
-  "max_medium_post_age_hours": 6,
+  "max_good_post_age_hours": 5,
+  "max_medium_post_age_hours": 8,
   "max_low_post_age_hours": 12,
   "max_bad_post_age_hours": 3,
   "bad_repeat_minutes": 30,
   "max_messages_per_cycle": 10,
   "sources": [
     {
-      "name": "reddit-openai-promos",
+      "name": "reddit-openai-search",
       "kind": "rss",
       "company": "OpenAI",
       "category": "AI Chat / Research",
-      "url": "https://www.reddit.com/search.rss?q=(OpenAI%20OR%20ChatGPT)%20(%22promo%20code%22%20OR%20promocode%20OR%20coupon%20OR%20credits%20OR%20trial)&sort=new",
+      "url": "https://www.reddit.com/search.rss?q=(OpenAI%20OR%20ChatGPT)%20(free%20OR%20coupon%20OR%20cupon%20OR%20code%20OR%20promo%20OR%20credits%20OR%20trial%20OR%20gift%20OR%20redeem)&sort=new",
       "source_type": "reddit"
     },
     {
-      "name": "reddit-runway-promos",
+      "name": "reddit-runway-search",
       "kind": "rss",
       "company": "Runway",
       "category": "AI Video",
-      "url": "https://www.reddit.com/search.rss?q=(Runway%20OR%20RunwayML)%20(%22promo%20code%22%20OR%20promocode%20OR%20coupon%20OR%20credits%20OR%20trial)&sort=new",
+      "url": "https://www.reddit.com/search.rss?q=(Runway%20OR%20RunwayML)%20(free%20OR%20coupon%20OR%20code%20OR%20promo%20OR%20credits%20OR%20trial%20OR%20gift%20OR%20redeem)&sort=new",
       "source_type": "reddit"
     },
     {
-      "name": "reddit-leonardo-promos",
+      "name": "reddit-leonardo-search",
       "kind": "rss",
       "company": "Leonardo AI",
       "category": "AI Image",
-      "url": "https://www.reddit.com/search.rss?q=(%22Leonardo%20AI%22%20OR%20Leonardo)%20(%22promo%20code%22%20OR%20promocode%20OR%20coupon%20OR%20credits%20OR%20trial)&sort=new",
+      "url": "https://www.reddit.com/search.rss?q=(%22Leonardo%20AI%22%20OR%20Leonardo)%20(free%20OR%20coupon%20OR%20code%20OR%20promo%20OR%20credits%20OR%20trial%20OR%20gift%20OR%20redeem)&sort=new",
       "source_type": "reddit"
     },
     {
-      "name": "reddit-meshy-promos",
+      "name": "reddit-meshy-search",
       "kind": "rss",
       "company": "Meshy",
       "category": "AI 3D Models",
-      "url": "https://www.reddit.com/search.rss?q=Meshy%20(%22promo%20code%22%20OR%20promocode%20OR%20coupon%20OR%20credits%20OR%20trial)&sort=new",
+      "url": "https://www.reddit.com/search.rss?q=Meshy%20(free%20OR%20coupon%20OR%20code%20OR%20promo%20OR%20credits%20OR%20trial%20OR%20gift%20OR%20redeem)&sort=new",
       "source_type": "reddit"
     },
     {
-      "name": "reddit-tripo-promos",
+      "name": "reddit-tripo-search",
       "kind": "rss",
       "company": "Tripo",
       "category": "AI 3D Models",
-      "url": "https://www.reddit.com/search.rss?q=(Tripo%20OR%20%22Tripo%20AI%22)%20(%22promo%20code%22%20OR%20promocode%20OR%20coupon%20OR%20credits%20OR%20trial)&sort=new",
+      "url": "https://www.reddit.com/search.rss?q=(Tripo%20OR%20%22Tripo%20AI%22)%20(free%20OR%20coupon%20OR%20code%20OR%20promo%20OR%20credits%20OR%20trial%20OR%20gift%20OR%20redeem)&sort=new",
       "source_type": "reddit"
     },
     {
-      "name": "reddit-general-ai-promos",
+      "name": "sub-openai",
+      "kind": "rss",
+      "company": "OpenAI",
+      "category": "AI Chat / Research",
+      "url": "https://www.reddit.com/r/OpenAI/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "sub-chatgpt",
+      "kind": "rss",
+      "company": "OpenAI",
+      "category": "AI Chat / Research",
+      "url": "https://www.reddit.com/r/ChatGPT/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "sub-runwayml",
+      "kind": "rss",
+      "company": "Runway",
+      "category": "AI Video",
+      "url": "https://www.reddit.com/r/runwayml/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "sub-stablediffusion",
+      "kind": "rss",
+      "company": "Leonardo AI",
+      "category": "AI Image",
+      "url": "https://www.reddit.com/r/StableDiffusion/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "sub-generativeai",
       "kind": "rss",
       "company": "General AI",
       "category": "Mixed",
-      "url": "https://www.reddit.com/search.rss?q=(%22AI%20video%22%20OR%20%22AI%20image%22%20OR%20%22AI%203D%22)%20(%22promo%20code%22%20OR%20promocode%20OR%20coupon%20OR%20credits%20OR%20trial)&sort=new",
+      "url": "https://www.reddit.com/r/GenerativeAI/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "sub-aiart",
+      "kind": "rss",
+      "company": "General AI",
+      "category": "AI Image",
+      "url": "https://www.reddit.com/r/aiArt/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "sub-promocodes",
+      "kind": "rss",
+      "company": "General AI",
+      "category": "Mixed",
+      "url": "https://www.reddit.com/r/PromoCodes/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "sub-freebies",
+      "kind": "rss",
+      "company": "General AI",
+      "category": "Mixed",
+      "url": "https://www.reddit.com/r/freebies/new/.rss",
+      "source_type": "reddit"
+    },
+    {
+      "name": "sub-beermoney",
+      "kind": "rss",
+      "company": "General AI",
+      "category": "Mixed",
+      "url": "https://www.reddit.com/r/beermoney/new/.rss",
       "source_type": "reddit"
     }
   ],
@@ -62,6 +126,7 @@
       "promo code",
       "promocode",
       "coupon",
+      "cupon",
       "discount",
       "trial",
       "free trial",
@@ -76,27 +141,35 @@
       "free month",
       "free months",
       "gift",
-      "referral"
+      "referral",
+      "working code",
+      "use this code",
+      "here is code",
+      "works for me",
+      "invite code",
+      "gift code"
     ],
     "negative": [
       "expired",
       "doesn't work",
+      "doesnt work",
       "not working",
       "dead code",
       "scam",
       "fake",
       "patch",
+      "patched",
       "bypass",
       "cracked",
       "leak"
     ]
   },
   "company_aliases": {
-    "OpenAI": ["openai", "chatgpt", "gpt"],
+    "OpenAI": ["openai", "chatgpt", "gpt", "chat gpt"],
     "Runway": ["runway", "runwayml"],
     "Leonardo AI": ["leonardo", "leonardo ai"],
     "Meshy": ["meshy"],
     "Tripo": ["tripo", "tripo ai"],
-    "General AI": ["ai", "video", "image", "3d", "credits", "trial", "promo"]
+    "General AI": ["ai", "video", "image", "3d", "credits", "trial", "promo", "coupon", "code"]
   }
 }
